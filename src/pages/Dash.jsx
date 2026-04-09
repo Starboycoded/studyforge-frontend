@@ -12,16 +12,24 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
     async function loadStats() {
         setLoading(true);
         try {
-            // FIX: correct endpoint is /api/stats (not /api/progress)
             const data = await apiFetch('/api/stats');
-            setStats(data);
+            const localCards = LS.get('sf_cards', []);
+            const now = new Date();
+            setStats({
+                totalCards: localCards.length,
+                dueCards: localCards.filter(c => !c.due || new Date(c.due) <= now).length,
+                totalSessions: data?.stats?.totalSessions ?? 0,
+                completedDays: data?.stats?.completedStudyDays ?? 0,
+                streak: LS.get('sf_streak', 0),
+            });
         } catch {
-            // Fallback to local data
             const cards = LS.get('sf_cards', []);
+            const now = new Date();
             setStats({
                 totalCards: cards.length,
-                dueCards: cards.filter(c => !c.due || new Date(c.due) <= new Date()).length,
+                dueCards: cards.filter(c => !c.due || new Date(c.due) <= now).length,
                 totalSessions: LS.get('sf_sessions', []).length,
+                completedDays: 0,
                 streak: LS.get('sf_streak', 0),
             });
         } finally { setLoading(false); }
@@ -32,7 +40,6 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-    // FIX: velocityHeights defined before .map() — was missing in original
     const velocityHeights = [40, 65, 30, 80, 55, 70, 90];
     const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -45,7 +52,6 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Hero greeting */}
             <div style={{ ...card({ background: `linear-gradient(135deg, ${C.a}22, ${C.pu}22)`, border: `1px solid ${C.a}33` }), display: 'flex', alignItems: 'center', gap: 16 }}>
                 <div style={{ width: 56, height: 56, borderRadius: '50%', background: C.aD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: displayAvatar.startsWith('data:') ? 0 : 32, overflow: 'hidden', flexShrink: 0 }}>
                     {displayAvatar.startsWith('data:') ? <img src={displayAvatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : displayAvatar}
@@ -56,13 +62,12 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
                 </div>
             </div>
 
-            {/* Stats row */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                 {[
                     { label: 'Flashcards', value: loading ? '...' : (stats?.totalCards ?? 0), icon: '🃏', color: C.a },
                     { label: 'Due Today', value: loading ? '...' : (stats?.dueCards ?? 0), icon: '⏰', color: C.re },
                     { label: 'Sessions', value: loading ? '...' : (stats?.totalSessions ?? 0), icon: '📖', color: C.gr },
-                    { label: 'Day Streak', value: loading ? '...' : (stats?.streak ?? 0), icon: '🔥', color: C.pu },
+                    { label: 'Days Done', value: loading ? '...' : (stats?.completedDays ?? 0), icon: '🔥', color: C.pu },
                 ].map(s => (
                     <div key={s.label} style={{ ...card(), textAlign: 'center' }}>
                         <div style={{ fontSize: 24, marginBottom: 6 }}>{s.icon}</div>
@@ -72,7 +77,6 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
                 ))}
             </div>
 
-            {/* Quick actions */}
             <div style={card()}>
                 <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Quick Actions</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
@@ -85,7 +89,6 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
                 </div>
             </div>
 
-            {/* Study Velocity chart */}
             <div style={card()}>
                 <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Study Velocity (Last 7 Days)</h3>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 100 }}>
@@ -98,7 +101,6 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
                 </div>
             </div>
 
-            {/* Today's reading goal */}
             <div style={{ ...card({ background: `linear-gradient(135deg, ${C.gr}15, ${C.bl}15)`, border: `1px solid ${C.gr}33` }) }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>

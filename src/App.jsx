@@ -12,13 +12,14 @@ import Cards from './pages/Cards';
 import Quiz from './pages/Quiz';
 import Prog from './pages/Prog';
 
-// ── Helper: safely extract a display name from any user/profile object ──
+
 function getSafeName(obj) {
     if (!obj) return '';
     const raw = obj.name || obj.displayName || obj.username || obj.email || '';
     if (typeof raw !== 'string') return String(raw || '');
     return raw.trim();
 }
+
 
 const TABS = [
     { id: 'dash', label: '🏠', title: 'Dashboard' },
@@ -29,6 +30,7 @@ const TABS = [
     { id: 'prog', label: '📊', title: 'Progress' },
 ];
 
+
 export default function App() {
     const [user, setUser] = useState(() => LS.get('sf_user'));
     const [profile, setProfile] = useState(() => LS.get('sf_profile'));
@@ -37,15 +39,18 @@ export default function App() {
     const [showProfile, setShowProfile] = useState(false);
     const [theme, setTheme] = useState(() => LS.get('sf_theme') || 'dark');
 
+
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : '');
         LS.set('sf_theme', theme);
     }, [theme]);
 
+
     const showToast = useCallback((msg) => {
         setToast(msg);
         setTimeout(() => setToast(''), 3000);
     }, []);
+
 
     function handleLogin(userData) {
         setUser(userData);
@@ -60,12 +65,14 @@ export default function App() {
         LS.set('sf_profile', newProfile);
     }
 
+
     function handleLogout() {
         localStorage.removeItem('token');
         LS.set('sf_user', null);
         setUser(null);
         setProfile(null);
     }
+
 
     async function handleProfileSave(updates) {
         const newProfile = { ...profile, ...updates };
@@ -78,28 +85,46 @@ export default function App() {
             LS.set('sf_user', updatedUser);
         }
 
-        // FIX: backend profile update endpoint is /auth/me (not /api/profile)
-        if (updates.name) {
-            try { await apiFetch('/auth/me', { name: updates.name }); } catch {
-                // Silently ignore — local update already applied
-            }
-        }
-
+        // NOTE: No backend profile update endpoint — local update only.
         setShowProfile(false);
         showToast('Profile updated!');
     }
+
+
+    // On mount, sync user data from backend
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token || !user) return;
+        apiFetch('/auth/me').then(data => {
+            if (data?.user) {
+                const backendUser = data.user;
+                const currentProfile = LS.get('sf_profile') || {};
+                if (backendUser.name && !currentProfile.name) {
+                    const updated = { ...currentProfile, name: backendUser.name };
+                    setProfile(updated);
+                    LS.set('sf_profile', updated);
+                }
+                setUser(prev => ({ ...prev, ...backendUser }));
+                LS.set('sf_user', { ...user, ...backendUser });
+            }
+        }).catch(() => {});
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
 
     if (!user || !localStorage.getItem('token')) {
         return <ApiKeyScreen onLogin={handleLogin} />;
     }
 
+
     const displayName = getSafeName(profile) || getSafeName(user) || 'User';
     const displayAvatar = (typeof profile?.avatar === 'string' && profile.avatar) ? profile.avatar : '🧑‍💻';
     const pageProps = { user, profile, showToast };
 
+
     return (
         <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
             <Toast msg={toast} />
+
 
             <nav style={{
                 background: C.s, borderBottom: `1px solid ${C.b}`,
@@ -110,6 +135,7 @@ export default function App() {
                     <span style={{ fontSize: 22 }}>📚</span>
                     <span style={{ color: C.tx, fontWeight: 700, fontSize: 16 }}>StudyForge</span>
                 </div>
+
 
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                     {TABS.map(t => (
@@ -124,10 +150,12 @@ export default function App() {
                     ))}
                 </div>
 
+
                 <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme"
                     style={{ background: 'transparent', border: 'none', color: C.mu, fontSize: 18, cursor: 'pointer', padding: '6px 8px' }}>
                     {theme === 'dark' ? '☀️' : '🌙'}
                 </button>
+
 
                 <button onClick={() => setShowProfile(true)} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
@@ -148,11 +176,13 @@ export default function App() {
                     </span>
                 </button>
 
+
                 <button onClick={handleLogout} title="Logout"
                     style={{ background: 'transparent', border: 'none', color: C.mu, fontSize: 18, cursor: 'pointer', padding: '6px 8px' }}>
                     🚪
                 </button>
             </nav>
+
 
             <main style={{ flex: 1, padding: '20px 16px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
                 {tab === 'dash' && <Dash {...pageProps} onTabChange={setTab} />}
@@ -162,6 +192,7 @@ export default function App() {
                 {tab === 'quiz' && <Quiz {...pageProps} />}
                 {tab === 'prog' && <Prog {...pageProps} />}
             </main>
+
 
             {showProfile && (
                 <ProfileModal

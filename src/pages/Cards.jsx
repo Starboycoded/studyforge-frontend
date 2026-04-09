@@ -3,6 +3,7 @@ import { C, card, btn, inp } from '../theme';
 import { LS } from '../utils/storage';
 import { apiFetch } from '../utils/ai';
 import { sm2 } from '../utils/sm2';
+
 export default function Cards({ showToast }) {
     const [cards, setCards] = useState(() => LS.get('sf_cards', []));
     const [selC, setSelC] = useState('All');
@@ -12,28 +13,40 @@ export default function Cards({ showToast }) {
     const [reviewQueue, setReviewQueue] = useState([]);
     const [currentIdx, setCurrentIdx] = useState(0);
     const [flipped, setFlipped] = useState(false);
+
     function saveCards(updated) { setCards(updated); LS.set('sf_cards', updated); }
+
     const courses = ['All', ...new Set(cards.map(c => c.course).filter(Boolean))];
     const filtered = selC === 'All' ? cards : cards.filter(c => c.course === selC);
     const now = new Date();
     const dueCards = filtered.filter(c => !c.due || new Date(c.due) <= now);
+
     async function generateCards() {
         if (!topic.trim()) return;
         setGenerating(true);
         try {
-            const result = await apiFetch('/api/flashcards', { topic: topic.trim() });
+            // FIX: backend /api/flashcards expects { content } not { topic }
+            const result = await apiFetch('/api/flashcards', { content: topic.trim(), count: 10 });
             const raw = Array.isArray(result) ? result : (result.flashcards || result.cards || []);
             if (!raw.length) throw new Error('No flashcards returned');
-            const newCards = raw.map((c, i) => ({ id: 'c' + Date.now() + i, q: c.front || c.q || c.question || '', a: c.back || c.a || c.answer || '', course: c.topic || (selC !== 'All' ? selC : topic.trim()), ef: 2.5, reps: 0, interval: 1, due: null }));
+            const newCards = raw.map((c, i) => ({
+                id: 'c' + Date.now() + i,
+                q: c.front || c.q || c.question || '',
+                a: c.back || c.a || c.answer || '',
+                course: c.topic || (selC !== 'All' ? selC : topic.trim()),
+                ef: 2.5, reps: 0, interval: 1, due: null,
+            }));
             saveCards([...cards, ...newCards]);
             showToast(`${newCards.length} flashcards generated!`);
             setTopic('');
         } catch (ex) { showToast('Error: ' + ex.message); } finally { setGenerating(false); }
     }
+
     function startReview() {
         if (!dueCards.length) { showToast('No cards due for review!'); return; }
         setReviewQueue([...dueCards]); setCurrentIdx(0); setFlipped(false); setReviewMode(true);
     }
+
     function rate(q) {
         const card = reviewQueue[currentIdx];
         const updated = sm2(card, q);
@@ -41,7 +54,9 @@ export default function Cards({ showToast }) {
         if (currentIdx + 1 >= reviewQueue.length) { setReviewMode(false); showToast('Review session complete! 🎉'); }
         else { setCurrentIdx(i => i + 1); setFlipped(false); }
     }
+
     function deleteCard(id) { saveCards(cards.filter(c => c.id !== id)); }
+
     if (reviewMode && reviewQueue.length > 0) {
         const current = reviewQueue[currentIdx];
         const progress = (currentIdx / reviewQueue.length) * 100;
@@ -49,7 +64,9 @@ export default function Cards({ showToast }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 600, margin: '0 auto' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <button onClick={() => setReviewMode(false)} style={btn('', { padding: '6px 12px', fontSize: 13 })}>← Back</button>
-                    <div style={{ flex: 1, background: C.s2, borderRadius: 4, height: 6 }}><div style={{ width: `${progress}%`, background: C.a, height: '100%', borderRadius: 4, transition: 'width 0.3s' }} /></div>
+                    <div style={{ flex: 1, background: C.s2, borderRadius: 4, height: 6 }}>
+                        <div style={{ width: `${progress}%`, background: C.a, height: '100%', borderRadius: 4, transition: 'width 0.3s' }} />
+                    </div>
                     <span style={{ color: C.mu, fontSize: 13 }}>{currentIdx + 1}/{reviewQueue.length}</span>
                 </div>
                 <div onClick={() => setFlipped(f => !f)} style={{ ...card({ padding: 32, minHeight: 200, cursor: 'pointer', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: flipped ? `linear-gradient(135deg, ${C.a}22, ${C.pu}22)` : C.s, transition: 'background 0.3s' }) }}>
@@ -61,8 +78,8 @@ export default function Cards({ showToast }) {
                     <div style={card()}>
                         <p style={{ color: C.mu, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>How well did you know this?</p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                            {[{q:0,label:'😵 Forgot',color:C.re},{q:2,label:'😕 Hard',color:'#f97316'},{q:3,label:'🙂 OK',color:C.bl},{q:4,label:'😊 Good',color:C.gr},{q:5,label:'🤩 Easy',color:C.pu}].map(r => (
-                                <button key={r.q} onClick={() => rate(r.q)} style={{ background: r.color+'22', border: `1px solid ${r.color}44`, borderRadius: 8, padding: '10px 4px', cursor: 'pointer', color: r.color, fontSize: 12, fontWeight: 600 }}>{r.label}</button>
+                            {[{ q: 0, label: '😵 Forgot', color: C.re }, { q: 2, label: '😕 Hard', color: '#f97316' }, { q: 3, label: '🙂 OK', color: C.bl }, { q: 4, label: '😊 Good', color: C.gr }, { q: 5, label: '🤩 Easy', color: C.pu }].map(r => (
+                                <button key={r.q} onClick={() => rate(r.q)} style={{ background: r.color + '22', border: `1px solid ${r.color}44`, borderRadius: 8, padding: '10px 4px', cursor: 'pointer', color: r.color, fontSize: 12, fontWeight: 600 }}>{r.label}</button>
                             ))}
                         </div>
                     </div>
@@ -70,6 +87,7 @@ export default function Cards({ showToast }) {
             </div>
         );
     }
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <h2 style={{ color: C.tx, fontSize: 20, fontWeight: 700 }}>🃏 Flashcards</h2>
@@ -82,8 +100,12 @@ export default function Cards({ showToast }) {
             </div>
             {cards.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {courses.map(c => (<button key={c} onClick={() => setSelC(c)} style={{ background: selC===c ? C.a : C.s2, color: selC===c ? '#fff' : C.mu, border: `1px solid ${selC===c ? C.a : C.b}`, borderRadius: 20, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{c}</button>))}
-                    <div style={{ marginLeft: 'auto' }}><button onClick={startReview} disabled={!dueCards.length} style={btn('p', { padding: '8px 16px' })}>🔁 Review ({dueCards.length} due)</button></div>
+                    {courses.map(c => (
+                        <button key={c} onClick={() => setSelC(c)} style={{ background: selC === c ? C.a : C.s2, color: selC === c ? '#fff' : C.mu, border: `1px solid ${selC === c ? C.a : C.b}`, borderRadius: 20, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{c}</button>
+                    ))}
+                    <div style={{ marginLeft: 'auto' }}>
+                        <button onClick={startReview} disabled={!dueCards.length} style={btn('p', { padding: '8px 16px' })}>🔁 Review ({dueCards.length} due)</button>
+                    </div>
                 </div>
             )}
             {filtered.length > 0 ? (
@@ -100,7 +122,11 @@ export default function Cards({ showToast }) {
                         </div>
                     ))}
                 </div>
-            ) : (<div style={{ textAlign: 'center', color: C.mu, padding: 32 }}>{cards.length === 0 ? 'No flashcards yet. Generate some above or upload a file!' : `No cards in "${selC}".`}</div>)}
+            ) : (
+                <div style={{ textAlign: 'center', color: C.mu, padding: 32 }}>
+                    {cards.length === 0 ? 'No flashcards yet. Generate some above or upload a file!' : `No cards in "${selC}".`}
+                </div>
+            )}
         </div>
     );
 }
