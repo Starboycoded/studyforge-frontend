@@ -14,6 +14,11 @@ export default function Cards({ showToast }) {
     const [currentIdx, setCurrentIdx] = useState(0);
     const [flipped, setFlipped] = useState(false);
 
+    const [sourceMode, setSourceMode] = useState('topic');
+    const [selectedFileId, setSelectedFileId] = useState(null);
+
+    const uploadedFiles = LS.get('sf_files', []);
+
     function saveCards(updated) { setCards(updated); LS.set('sf_cards', updated); }
 
     const courses = ['All', ...new Set(cards.map(c => c.course).filter(Boolean))];
@@ -22,18 +27,35 @@ export default function Cards({ showToast }) {
     const dueCards = filtered.filter(c => !c.due || new Date(c.due) <= now);
 
     async function generateCards() {
-        if (!topic.trim()) return;
+        let content = '';
+        let courseName = '';
+
+        if (sourceMode === 'file') {
+            if (!selectedFileId) { showToast('Please select a file first!'); return; }
+            const file = uploadedFiles.find(f => f.id === selectedFileId);
+            if (!file) { showToast('File not found. Please re-upload it.'); return; }
+            if (!file.text || file.text.trim().length < 10) {
+                showToast('Error: Could not read text from this file. Try a PDF or TXT file.');
+                return;
+            }
+            content = file.text;
+            courseName = file.name.replace(/\.[^.]+$/, '');
+        } else {
+            if (!topic.trim()) return;
+            content = topic.trim();
+            courseName = topic.trim();
+        }
+
         setGenerating(true);
         try {
-            // FIX: backend /api/flashcards expects { content } not { topic }
-            const result = await apiFetch('/api/flashcards', { content: topic.trim(), count: 10 });
+            const result = await apiFetch('/api/flashcards', { content, count: 10 });
             const raw = Array.isArray(result) ? result : (result.flashcards || result.cards || []);
             if (!raw.length) throw new Error('No flashcards returned');
             const newCards = raw.map((c, i) => ({
                 id: 'c' + Date.now() + i,
                 q: c.front || c.q || c.question || '',
                 a: c.back || c.a || c.answer || '',
-                course: c.topic || (selC !== 'All' ? selC : topic.trim()),
+                course: c.topic || courseName,
                 ef: 2.5, reps: 0, interval: 1, due: null,
             }));
             saveCards([...cards, ...newCards]);
@@ -56,6 +78,12 @@ export default function Cards({ showToast }) {
     }
 
     function deleteCard(id) { saveCards(cards.filter(c => c.id !== id)); }
+
+    function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
 
     if (reviewMode && reviewQueue.length > 0) {
         const current = reviewQueue[currentIdx];
@@ -91,23 +119,56 @@ export default function Cards({ showToast }) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <h2 style={{ color: C.tx, fontSize: 20, fontWeight: 700 }}>🃏 Flashcards</h2>
+
             <div style={card()}>
-                <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Generate Flashcards</h3>
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <input style={inp({ flex: 1 })} type="text" placeholder="Enter a topic to generate cards..." value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === 'Enter' && generateCards()} />
-                    <button onClick={generateCards} disabled={generating || !topic.trim()} style={btn('p')}>{generating ? '...' : 'Generate'}</button>
+                <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Generate Flashcards</h3>
+
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                    <button onClick={() => setSourceMode('topic')} style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: sourceMode === 'topic' ? C.a : C.s2, color: sourceMode === 'topic' ? '#fff' : C.mu, border: `1px solid ${sourceMode === 'topic' ? C.a : C.b}` }}>✏️ From Topic</button>
+                    <button onClick={() => setSourceMode('file')} style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: sourceMode === 'file' ? C.a : C.s2, color: sourceMode === 'file' ? '#fff' : C.mu, border: `1px solid ${sourceMode === 'file' ? C.a : C.b}` }}>📁 From My Files</button>
                 </div>
+
+                {sourceMode === 'topic' && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <input style={inp({ flex: 1 })} type="text" placeholder="Enter a topic to generate cards..." value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === 'Enter' && generateCards()} />
+                        <button onClick={generateCards} disabled={generating || !topic.trim()} style={btn('p')}>{generating ? '...' : 'Generate'}</button>
+                    </div>
+                )}
+
+                {sourceMode === 'file' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {uploadedFiles.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: C.mu, padding: '16px 0', fontSize: 13 }}>No files uploaded yet. Go to the 📁 Files tab to upload your study material.</div>
+                        ) : (
+                            <>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {uploadedFiles.map(f => (
+                                        <div key={f.id} onClick={() => setSelectedFileId(f.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: selectedFileId === f.id ? C.aD : C.s2, border: `1px solid ${selectedFileId === f.id ? C.a : C.b}`, borderRadius: 8, padding: '10px 12px', cursor: 'pointer', transition: 'all 0.15s' }}>
+                                            <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ color: C.tx, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                                                <div style={{ color: C.mu, fontSize: 11 }}>{formatSize(f.size)}</div>
+                                            </div>
+                                            {selectedFileId === f.id && <span style={{ color: C.a, fontSize: 16 }}>✓</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={generateCards} disabled={generating || !selectedFileId} style={btn('p')}>
+                                    {generating ? 'Generating...' : selectedFileId ? `🃏 Generate from ${uploadedFiles.find(f => f.id === selectedFileId)?.name.split('.')[0]}` : 'Select a file above'}
+                                </button>
+                            </>
+                        )}
+                    </div>
+                )}
             </div>
+
             {cards.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {courses.map(c => (
-                        <button key={c} onClick={() => setSelC(c)} style={{ background: selC === c ? C.a : C.s2, color: selC === c ? '#fff' : C.mu, border: `1px solid ${selC === c ? C.a : C.b}`, borderRadius: 20, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{c}</button>
-                    ))}
-                    <div style={{ marginLeft: 'auto' }}>
-                        <button onClick={startReview} disabled={!dueCards.length} style={btn('p', { padding: '8px 16px' })}>🔁 Review ({dueCards.length} due)</button>
-                    </div>
+                    {courses.map(c => (<button key={c} onClick={() => setSelC(c)} style={{ background: selC === c ? C.a : C.s2, color: selC === c ? '#fff' : C.mu, border: `1px solid ${selC === c ? C.a : C.b}`, borderRadius: 20, padding: '5px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{c}</button>))}
+                    <div style={{ marginLeft: 'auto' }}><button onClick={startReview} disabled={!dueCards.length} style={btn('p', { padding: '8px 16px' })}>🔁 Review ({dueCards.length} due)</button></div>
                 </div>
             )}
+
             {filtered.length > 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
                     {filtered.map(c => (
@@ -123,9 +184,7 @@ export default function Cards({ showToast }) {
                     ))}
                 </div>
             ) : (
-                <div style={{ textAlign: 'center', color: C.mu, padding: 32 }}>
-                    {cards.length === 0 ? 'No flashcards yet. Generate some above or upload a file!' : `No cards in "${selC}".`}
-                </div>
+                <div style={{ textAlign: 'center', color: C.mu, padding: 32 }}>{cards.length === 0 ? 'No flashcards yet. Generate some above or upload a file!' : `No cards in "${selC}".`}</div>
             )}
         </div>
     );
