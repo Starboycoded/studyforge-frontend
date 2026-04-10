@@ -17,11 +17,24 @@ export default function Files({ showToast }) {
     function saveFiles(updated) { setFiles(updated); LS.set('sf_files', updated); }
 
 
+    // Returns true if this file type needs server-side extraction
+    function needsServerExtraction(file) {
+        return (
+            file.type === 'application/pdf' ||
+            file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            file.type === 'application/msword' ||
+            file.name.match(/\.(pdf|docx|doc)$/i)
+        );
+    }
+
+
     async function handleFiles(fileList) {
         const newFiles = [];
         for (const file of Array.from(fileList)) {
             let text = '';
-            if (file.type === 'text/plain' || file.name.match(/\.(txt|md)$/i)) {
+            // Only read plain text files directly in the browser
+            // PDF, DOCX, DOC must go to the backend extractor
+            if ((file.type === 'text/plain' || file.name.match(/\.(txt|md)$/i)) && !needsServerExtraction(file)) {
                 text = await new Promise(res => {
                     const reader = new FileReader();
                     reader.onload = e => res(e.target.result || '');
@@ -34,7 +47,7 @@ export default function Files({ showToast }) {
                 size: file.size,
                 type: file.type,
                 text: text || '',
-                needsExtraction: (file.type === 'application/pdf' || file.name.match(/\.pdf$/i)) ? true : false,
+                needsExtraction: needsServerExtraction(file),
                 _rawFile: file,
                 addedAt: new Date().toISOString(),
             });
@@ -55,7 +68,7 @@ export default function Files({ showToast }) {
                         body: formData,
                     });
                     const contentType = r.headers.get('content-type') || '';
-                    if (!contentType.includes('application/json')) throw new Error('Server error — backend may be waking up');
+                    if (!contentType.includes('application/json')) throw new Error('Server error — backend may be waking up, try again in 30s');
                     const data = await r.json();
                     if (!r.ok) throw new Error(data.error || 'Extraction failed');
                     f.text = data.text || '';
@@ -138,6 +151,13 @@ export default function Files({ showToast }) {
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
+    function fileIcon(name) {
+        if (name.match(/\.pdf$/i)) return '📄';
+        if (name.match(/\.docx?$/i)) return '📝';
+        if (name.match(/\.md$/i)) return '📝';
+        return '📃';
+    }
+
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -146,8 +166,8 @@ export default function Files({ showToast }) {
             <div style={{ ...card({ border: `2px dashed ${dragOver ? C.a : C.b}`, background: dragOver ? C.aD : C.s, textAlign: 'center', padding: 32, cursor: 'pointer', transition: 'all 0.2s' }) }} onClick={() => fileRef.current?.click()} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>📂</div>
                 <p style={{ color: C.tx, fontWeight: 600, marginBottom: 4 }}>Drop files here or click to upload</p>
-                <p style={{ color: C.mu, fontSize: 13 }}>PDF text is extracted automatically · TXT and MD supported</p>
-                <input ref={fileRef} type="file" multiple accept=".pdf,.txt,.md" style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+                <p style={{ color: C.mu, fontSize: 13 }}>PDF, DOCX, TXT and MD supported · Text extracted automatically</p>
+                <input ref={fileRef} type="file" multiple accept=".pdf,.docx,.doc,.txt,.md" style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             </div>
 
             <div style={card()}>
@@ -167,35 +187,26 @@ export default function Files({ showToast }) {
                             <input
                                 style={{ ...inp(), width: 60, padding: '4px 8px', fontSize: 13 }}
                                 type="number" min={1} max={30} value={planDays}
-                                onChange={e => setPlanDays(e.target.value)}
+                                onChange={e => setPlanDays(Number(e.target.value))}
                             />
                         </div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {files.map(f => {
-                            const hasText = f.text && f.text.trim().length > 10;
-                            return (
-                                <div key={f.id} style={{ background: C.s2, borderRadius: 8, padding: '10px 12px', border: `1px solid ${hasText ? C.b : C.re + '44'}` }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                        <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ color: C.tx, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                                            <div style={{ color: hasText ? C.gr : C.re, fontSize: 11 }}>
-                                                {hasText ? `✅ ${f.text.trim().split(/\s+/).length} words ready` : '⚠️ No text — remove and re-upload'}
-                                            </div>
-                                        </div>
-                                        <button onClick={() => generateCardsFromFile(f)} disabled={loading || !hasText} style={btn('p', { padding: '6px 12px', fontSize: 12, opacity: hasText ? 1 : 0.4 })} title="Generate flashcards">{loading ? '...' : '🃏 Cards'}</button>
-                                        <button onClick={() => generatePlanFromFile(f)} disabled={loading || !hasText} style={btn('p', { padding: '6px 12px', fontSize: 12, background: '#6366f1', opacity: hasText ? 1 : 0.4 })} title="Generate study plan">{loading ? '...' : '📅 Plan'}</button>
-                                        <button onClick={() => removeFile(f.id)} style={btn('d', { padding: '6px 10px', fontSize: 12 })}>✕</button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    {files.map(file => (
+                        <div key={file.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.b}` }}>
+                            <span style={{ fontSize: 22 }}>{fileIcon(file.name)}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ color: C.tx, fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+                                <div style={{ color: C.mu, fontSize: 12 }}>{formatSize(file.size)} · {file.text && file.text.trim().length > 10 ? `${file.text.trim().split(/\s+/).length} words` : '⚠️ No text — re-upload to extract'}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                <button onClick={() => generateCardsFromFile(file)} disabled={loading || !file.text || file.text.trim().length < 10} style={{ ...btn('s'), fontSize: 12, padding: '4px 10px', opacity: (!file.text || file.text.trim().length < 10) ? 0.4 : 1 }}>🃏 Cards</button>
+                                <button onClick={() => generatePlanFromFile(file)} disabled={loading || !file.text || file.text.trim().length < 10} style={{ ...btn('s'), fontSize: 12, padding: '4px 10px', opacity: (!file.text || file.text.trim().length < 10) ? 0.4 : 1 }}>📅 Plan</button>
+                                <button onClick={() => removeFile(file.id)} style={{ ...btn('d'), fontSize: 12, padding: '4px 10px' }}>🗑</button>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
-
-            {files.length === 0 && (<div style={{ textAlign: 'center', color: C.mu, padding: 32 }}>No files uploaded yet. Drop some study material above!</div>)}
         </div>
     );
 }
