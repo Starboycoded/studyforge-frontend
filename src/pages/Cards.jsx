@@ -5,31 +5,40 @@ import { apiFetch } from '../utils/ai';
 import { sm2 } from '../utils/sm2';
 
 
+
+
 export default function Cards({ showToast }) {
     const [cards, setCards] = useState(() => LS.get('sf_cards', []));
     const [selC, setSelC] = useState('All');
     const [generating, setGenerating] = useState(false);
     const [topic, setTopic] = useState('');
+    const [count, setCount] = useState(10);
     const [reviewMode, setReviewMode] = useState(false);
     const [reviewQueue, setReviewQueue] = useState([]);
     const [currentIdx, setCurrentIdx] = useState(0);
     const [flipped, setFlipped] = useState(false);
 
+
     const [sourceMode, setSourceMode] = useState('topic');
     const [selectedFileId, setSelectedFileId] = useState(null);
 
+
     const uploadedFiles = LS.get('sf_files', []);
 
+
     function saveCards(updated) { setCards(updated); LS.set('sf_cards', updated); }
+
 
     const courses = ['All', ...new Set(cards.map(c => c.course).filter(Boolean))];
     const filtered = selC === 'All' ? cards : cards.filter(c => c.course === selC);
     const now = new Date();
     const dueCards = filtered.filter(c => !c.due || new Date(c.due) <= now);
 
+
     async function generateCards() {
         let content = '';
         let courseName = '';
+
 
         if (sourceMode === 'file') {
             if (!selectedFileId) { showToast('Please select a file first!'); return; }
@@ -40,35 +49,42 @@ export default function Cards({ showToast }) {
                 return;
             }
             content = file.text;
+            // Use the filename (without extension) as the course name — consistent grouping
             courseName = file.name.replace(/\.[^.]+$/, '');
         } else {
             if (!topic.trim()) return;
             content = topic.trim();
+            // Use the topic as the course name — consistent grouping
             courseName = topic.trim();
         }
 
+
         setGenerating(true);
         try {
-            const result = await apiFetch('/api/flashcards', { content, count: 10 });
+            const result = await apiFetch('/api/flashcards', { content, count: Number(count) });
             const raw = Array.isArray(result) ? result : (result.flashcards || result.cards || []);
             if (!raw.length) throw new Error('No flashcards returned');
-            const newCards = raw.map((c, i) => ({
+            // Slice to exactly the requested count, and ALWAYS use courseName (not c.topic)
+            // This prevents scattered grouping when the AI assigns different topic names per card
+            const newCards = raw.slice(0, Number(count)).map((c, i) => ({
                 id: 'c' + Date.now() + i,
                 q: c.front || c.q || c.question || '',
                 a: c.back || c.a || c.answer || '',
-                course: c.topic || courseName,
+                course: courseName,   // ← forced, not from AI
                 ef: 2.5, reps: 0, interval: 1, due: null,
             }));
             saveCards([...cards, ...newCards]);
-            showToast(`${newCards.length} flashcards generated!`);
+            showToast(`${newCards.length} flashcards added to "${courseName}"!`);
             setTopic('');
         } catch (ex) { showToast('Error: ' + ex.message); } finally { setGenerating(false); }
     }
+
 
     function startReview() {
         if (!dueCards.length) { showToast('No cards due for review!'); return; }
         setReviewQueue([...dueCards]); setCurrentIdx(0); setFlipped(false); setReviewMode(true);
     }
+
 
     function rate(q) {
         const card = reviewQueue[currentIdx];
@@ -78,13 +94,16 @@ export default function Cards({ showToast }) {
         else { setCurrentIdx(i => i + 1); setFlipped(false); }
     }
 
+
     function deleteCard(id) { saveCards(cards.filter(c => c.id !== id)); }
+
 
     function formatSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
+
 
     if (reviewMode && reviewQueue.length > 0) {
         const current = reviewQueue[currentIdx];
@@ -117,24 +136,33 @@ export default function Cards({ showToast }) {
         );
     }
 
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <h2 style={{ color: C.tx, fontSize: 20, fontWeight: 700 }}>🃏 Flashcards</h2>
 
+
             <div style={card()}>
                 <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Generate Flashcards</h3>
+
 
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                     <button onClick={() => setSourceMode('topic')} style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: sourceMode === 'topic' ? C.a : C.s2, color: sourceMode === 'topic' ? '#fff' : C.mu, border: `1px solid ${sourceMode === 'topic' ? C.a : C.b}` }}>✏️ From Topic</button>
                     <button onClick={() => setSourceMode('file')} style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: sourceMode === 'file' ? C.a : C.s2, color: sourceMode === 'file' ? '#fff' : C.mu, border: `1px solid ${sourceMode === 'file' ? C.a : C.b}` }}>📁 From My Files</button>
                 </div>
 
+
                 {sourceMode === 'topic' && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <input style={inp({ flex: 1 })} type="text" placeholder="Enter a topic to generate cards..." value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === 'Enter' && generateCards()} />
-                        <button onClick={generateCards} disabled={generating || !topic.trim()} style={btn('p')}>{generating ? '...' : 'Generate'}</button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <input style={inp()} type="text" placeholder="Enter a topic to generate cards..." value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === 'Enter' && generateCards()} />
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <label style={{ color: C.mu, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Cards:</label>
+                            <input style={{ ...inp(), width: 70 }} type="number" min={1} max={30} value={count} onChange={e => setCount(e.target.value)} />
+                            <button onClick={generateCards} disabled={generating || !topic.trim()} style={btn('p', { flex: 1 })}>{generating ? 'Generating...' : 'Generate'}</button>
+                        </div>
                     </div>
                 )}
+
 
                 {sourceMode === 'file' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -147,7 +175,7 @@ export default function Cards({ showToast }) {
                                         const hasText = f.text && f.text.trim().length > 10;
                                         return (
                                             <div key={f.id} onClick={() => hasText && setSelectedFileId(f.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: selectedFileId === f.id ? C.aD : C.s2, border: `1px solid ${selectedFileId === f.id ? C.a : C.b}`, borderRadius: 8, padding: '10px 12px', cursor: hasText ? 'pointer' : 'not-allowed', opacity: hasText ? 1 : 0.5, transition: 'all 0.15s' }}>
-                                                <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
+                                                <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.match(/\.docx?$/i) ? '📝' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ color: C.tx, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
                                                     <div style={{ color: hasText ? C.mu : C.re, fontSize: 11 }}>
@@ -159,14 +187,19 @@ export default function Cards({ showToast }) {
                                         );
                                     })}
                                 </div>
-                                <button onClick={generateCards} disabled={generating || !selectedFileId} style={btn('p')}>
-                                    {generating ? 'Generating...' : selectedFileId ? `🃏 Generate from ${uploadedFiles.find(f => f.id === selectedFileId)?.name.split('.')[0]}` : 'Select a file above'}
-                                </button>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <label style={{ color: C.mu, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Cards:</label>
+                                    <input style={{ ...inp(), width: 70 }} type="number" min={1} max={30} value={count} onChange={e => setCount(e.target.value)} />
+                                    <button onClick={generateCards} disabled={generating || !selectedFileId} style={btn('p', { flex: 1 })}>
+                                        {generating ? 'Generating...' : selectedFileId ? `🃏 Generate from ${uploadedFiles.find(f => f.id === selectedFileId)?.name.split('.')[0]}` : 'Select a file above'}
+                                    </button>
+                                </div>
                             </>
                         )}
                     </div>
                 )}
             </div>
+
 
             {cards.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -174,6 +207,7 @@ export default function Cards({ showToast }) {
                     <div style={{ marginLeft: 'auto' }}><button onClick={startReview} disabled={!dueCards.length} style={btn('p', { padding: '8px 16px' })}>🔁 Review ({dueCards.length} due)</button></div>
                 </div>
             )}
+
 
             {filtered.length > 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>

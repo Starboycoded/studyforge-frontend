@@ -4,6 +4,8 @@ import { LS } from '../utils/storage';
 import { apiFetch } from '../utils/ai';
 
 
+
+
 export default function Quiz({ showToast }) {
     const [topic, setTopic] = useState('');
     const [numQ, setNumQ] = useState(5);
@@ -13,13 +15,17 @@ export default function Quiz({ showToast }) {
     const [submitted, setSubmitted] = useState(false);
     const [score, setScore] = useState(null);
 
+
     const [sourceMode, setSourceMode] = useState('topic');
     const [selectedFileId, setSelectedFileId] = useState(null);
 
+
     const uploadedFiles = LS.get('sf_files', []);
+
 
     async function generate() {
         let content = '';
+
 
         if (sourceMode === 'file') {
             if (!selectedFileId) { showToast('Please select a file first!'); return; }
@@ -35,20 +41,25 @@ export default function Quiz({ showToast }) {
             content = topic.trim();
         }
 
+
         setLoading(true); setAnswers({}); setSubmitted(false); setScore(null);
         try {
             const result = await apiFetch('/api/quiz', { content, count: Number(numQ) });
             const raw = Array.isArray(result) ? result : (result.questions || result.quiz || result.data || []);
             if (!raw.length) throw new Error('No questions returned');
-            setQuestions(raw);
-            showToast(`${raw.length} questions generated!`);
+            // Enforce exact count — backend may return more due to chunking
+            const trimmed = raw.slice(0, Number(numQ));
+            setQuestions(trimmed);
+            showToast(`${trimmed.length} questions generated!`);
         } catch (ex) { showToast('Error: ' + ex.message); } finally { setLoading(false); }
     }
+
 
     function selectAnswer(qIdx, optionIdx) {
         if (submitted) return;
         setAnswers(prev => ({ ...prev, [qIdx]: optionIdx }));
     }
+
 
     function submit() {
         if (Object.keys(answers).length < questions.length) { showToast('Please answer all questions first!'); return; }
@@ -63,7 +74,9 @@ export default function Quiz({ showToast }) {
         LS.set('sf_quiz_history', history);
     }
 
+
     function reset() { setQuestions([]); setAnswers({}); setSubmitted(false); setScore(null); setTopic(''); }
+
 
     function formatSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
@@ -71,20 +84,25 @@ export default function Quiz({ showToast }) {
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
+
     const canGenerate = sourceMode === 'topic' ? topic.trim().length > 0 : !!selectedFileId;
+
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <h2 style={{ color: C.tx, fontSize: 20, fontWeight: 700 }}>❓ Quiz</h2>
 
+
             {!questions.length && (
                 <div style={card()}>
                     <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Generate a Quiz</h3>
+
 
                     <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                         <button onClick={() => setSourceMode('topic')} style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: sourceMode === 'topic' ? C.a : C.s2, color: sourceMode === 'topic' ? '#fff' : C.mu, border: `1px solid ${sourceMode === 'topic' ? C.a : C.b}` }}>✏️ From Topic</button>
                         <button onClick={() => setSourceMode('file')} style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: sourceMode === 'file' ? C.a : C.s2, color: sourceMode === 'file' ? '#fff' : C.mu, border: `1px solid ${sourceMode === 'file' ? C.a : C.b}` }}>📁 From My Files</button>
                     </div>
+
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {sourceMode === 'topic' && (
@@ -93,6 +111,7 @@ export default function Quiz({ showToast }) {
                                 <input style={inp()} type="text" placeholder="e.g. Photosynthesis, World War II, Python..." value={topic} onChange={e => setTopic(e.target.value)} onKeyDown={e => e.key === 'Enter' && generate()} />
                             </div>
                         )}
+
 
                         {sourceMode === 'file' && (
                             <div>
@@ -105,7 +124,7 @@ export default function Quiz({ showToast }) {
                                             const hasText = f.text && f.text.trim().length > 10;
                                             return (
                                                 <div key={f.id} onClick={() => hasText && setSelectedFileId(f.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: selectedFileId === f.id ? C.aD : C.s2, border: `1px solid ${selectedFileId === f.id ? C.a : C.b}`, borderRadius: 8, padding: '10px 12px', cursor: hasText ? 'pointer' : 'not-allowed', opacity: hasText ? 1 : 0.5, transition: 'all 0.15s' }}>
-                                                    <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
+                                                    <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.match(/\.docx?$/i) ? '📝' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
                                                     <div style={{ flex: 1, minWidth: 0 }}>
                                                         <div style={{ color: C.tx, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
                                                         <div style={{ color: hasText ? C.mu : C.re, fontSize: 11 }}>
@@ -121,15 +140,18 @@ export default function Quiz({ showToast }) {
                             </div>
                         )}
 
+
                         <div>
                             <label style={{ color: C.mu, fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>Number of Questions</label>
                             <input style={inp()} type="number" min={1} max={20} value={numQ} onChange={e => setNumQ(e.target.value)} />
                         </div>
 
+
                         <button onClick={generate} disabled={loading || !canGenerate} style={btn('p')}>{loading ? 'Generating...' : '✨ Generate Quiz'}</button>
                     </div>
                 </div>
             )}
+
 
             {submitted && score !== null && (
                 <div style={{ ...card({ background: score / questions.length >= 0.7 ? `linear-gradient(135deg, ${C.gr}22, ${C.bl}22)` : `linear-gradient(135deg, ${C.re}22, ${C.pu}22)`, border: `1px solid ${score / questions.length >= 0.7 ? C.gr : C.re}44`, textAlign: 'center' }) }}>
@@ -139,6 +161,7 @@ export default function Quiz({ showToast }) {
                     <button onClick={reset} style={{ ...btn('p', { marginTop: 16 }) }}>New Quiz</button>
                 </div>
             )}
+
 
             {questions.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

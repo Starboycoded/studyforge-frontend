@@ -10,7 +10,10 @@ import Files from './pages/Files';
 import Plan from './pages/Plan';
 import Cards from './pages/Cards';
 import Quiz from './pages/Quiz';
+import Theory from './pages/Theory';
 import Prog from './pages/Prog';
+
+
 
 
 function getSafeName(obj) {
@@ -21,14 +24,19 @@ function getSafeName(obj) {
 }
 
 
+
+
 const TABS = [
     { id: 'dash', label: '🏠', title: 'Dashboard' },
     { id: 'files', label: '📁', title: 'Files' },
     { id: 'plan', label: '📅', title: 'Plan' },
     { id: 'cards', label: '🃏', title: 'Cards' },
     { id: 'quiz', label: '❓', title: 'Quiz' },
+    { id: 'theory', label: '🎓', title: 'Theory' },
     { id: 'prog', label: '📊', title: 'Progress' },
 ];
+
+
 
 
 export default function App() {
@@ -40,16 +48,22 @@ export default function App() {
     const [theme, setTheme] = useState(() => LS.get('sf_theme') || 'dark');
 
 
+
+
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : '');
         LS.set('sf_theme', theme);
     }, [theme]);
 
 
+
+
     const showToast = useCallback((msg) => {
         setToast(msg);
         setTimeout(() => setToast(''), 3000);
     }, []);
+
+
 
 
     function handleLogin(userData) {
@@ -66,6 +80,8 @@ export default function App() {
     }
 
 
+
+
     function handleLogout() {
         localStorage.removeItem('token');
         LS.set('sf_user', null);
@@ -74,10 +90,13 @@ export default function App() {
     }
 
 
+
+
     async function handleProfileSave(updates) {
         const newProfile = { ...profile, ...updates };
         setProfile(newProfile);
         LS.set('sf_profile', newProfile);
+
 
         if (updates.name) {
             const updatedUser = { ...user, name: updates.name };
@@ -85,10 +104,13 @@ export default function App() {
             LS.set('sf_user', updatedUser);
         }
 
+
         // NOTE: No backend profile update endpoint — local update only.
         setShowProfile(false);
         showToast('Profile updated!');
     }
+
+
 
 
     // On mount, sync user data from backend
@@ -111,9 +133,13 @@ export default function App() {
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 
+
+
     if (!user || !localStorage.getItem('token')) {
         return <ApiKeyScreen onLogin={handleLogin} />;
     }
+
+
 
 
     const displayName = getSafeName(profile) || getSafeName(user) || 'User';
@@ -121,9 +147,13 @@ export default function App() {
     const pageProps = { user, profile, showToast };
 
 
+
+
     return (
         <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column' }}>
             <Toast msg={toast} />
+
+
 
 
             <nav style={{
@@ -135,6 +165,8 @@ export default function App() {
                     <span style={{ fontSize: 22 }}>📚</span>
                     <span style={{ color: C.tx, fontWeight: 700, fontSize: 16 }}>StudyForge</span>
                 </div>
+
+
 
 
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -151,10 +183,14 @@ export default function App() {
                 </div>
 
 
+
+
                 <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme"
                     style={{ background: 'transparent', border: 'none', color: C.mu, fontSize: 18, cursor: 'pointer', padding: '6px 8px' }}>
                     {theme === 'dark' ? '☀️' : '🌙'}
                 </button>
+
+
 
 
                 <button onClick={() => setShowProfile(true)} style={{
@@ -177,11 +213,15 @@ export default function App() {
                 </button>
 
 
+
+
                 <button onClick={handleLogout} title="Logout"
                     style={{ background: 'transparent', border: 'none', color: C.mu, fontSize: 18, cursor: 'pointer', padding: '6px 8px' }}>
                     🚪
                 </button>
             </nav>
+
+
 
 
             <main style={{ flex: 1, padding: '20px 16px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
@@ -190,8 +230,11 @@ export default function App() {
                 {tab === 'plan' && <Plan {...pageProps} />}
                 {tab === 'cards' && <Cards {...pageProps} />}
                 {tab === 'quiz' && <Quiz {...pageProps} />}
+                {tab === 'theory' && <Theory {...pageProps} />}
                 {tab === 'prog' && <Prog {...pageProps} />}
             </main>
+
+
 
 
             {showProfile && (
