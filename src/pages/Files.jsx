@@ -3,15 +3,19 @@ import { C, card, btn, inp } from '../theme';
 import { LS } from '../utils/storage';
 import { apiFetch } from '../utils/ai';
 
+
 export default function Files({ showToast }) {
     const [files, setFiles] = useState(() => LS.get('sf_files', []));
     const [ytUrl, setYtUrl] = useState('');
     const [loading, setLoading] = useState(false);
     const [loadingYt, setLoadingYt] = useState(false);
     const [dragOver, setDragOver] = useState(false);
+    const [planDays, setPlanDays] = useState(7);
     const fileRef = useRef();
 
+
     function saveFiles(updated) { setFiles(updated); LS.set('sf_files', updated); }
+
 
     async function handleFiles(fileList) {
         const newFiles = [];
@@ -68,7 +72,9 @@ export default function Files({ showToast }) {
         saveFiles(updatedFiles);
     }
 
+
     function removeFile(id) { saveFiles(files.filter(f => f.id !== id)); }
+
 
     async function generateFromYoutube() {
         if (!ytUrl.trim()) return;
@@ -85,6 +91,7 @@ export default function Files({ showToast }) {
         } catch (ex) { showToast('Error: ' + ex.message); } finally { setLoadingYt(false); }
     }
 
+
     async function generateCardsFromFile(file) {
         if (!file.text || file.text.trim().length < 10) { showToast('No text extracted from this file yet. Remove and re-upload it.'); return; }
         setLoading(true);
@@ -99,11 +106,18 @@ export default function Files({ showToast }) {
         } catch (ex) { showToast('Error: ' + ex.message); } finally { setLoading(false); }
     }
 
+
     async function generatePlanFromFile(file) {
         if (!file.text || file.text.trim().length < 10) { showToast('No text extracted from this file yet. Remove and re-upload it.'); return; }
         setLoading(true);
         try {
-            const result = await apiFetch('/api/plan', { content: file.text, subject: file.name.replace(/\.[^.]+$/, ''), hoursPerDay: 2 });
+            const result = await apiFetch('/api/plan', {
+                content: file.text,
+                subject: file.name.replace(/\.[^.]+$/, ''),
+                hoursPerDay: 2,
+                days: Number(planDays),
+                examDate: `${Number(planDays)} days from now`,
+            });
             let raw = [];
             if (Array.isArray(result)) { raw = result; }
             else if (result?.plan) {
@@ -113,15 +127,17 @@ export default function Files({ showToast }) {
             }
             if (!raw.length) throw new Error('No plan returned from server');
             LS.set('sf_plan', raw);
-            showToast(`Study plan generated from ${file.name}! Go to Plan tab to view it.`);
+            showToast(`${raw.length}-day study plan generated from ${file.name}! Go to Plan tab to view it.`);
         } catch (ex) { showToast('Error: ' + ex.message); } finally { setLoading(false); }
     }
+
 
     function formatSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
+
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -144,7 +160,17 @@ export default function Files({ showToast }) {
 
             {files.length > 0 && (
                 <div style={card()}>
-                    <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Uploaded Files ({files.length})</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                        <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700 }}>Uploaded Files ({files.length})</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <label style={{ color: C.mu, fontSize: 12, fontWeight: 600 }}>Plan days:</label>
+                            <input
+                                style={{ ...inp(), width: 60, padding: '4px 8px', fontSize: 13 }}
+                                type="number" min={1} max={30} value={planDays}
+                                onChange={e => setPlanDays(e.target.value)}
+                            />
+                        </div>
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {files.map(f => {
                             const hasText = f.text && f.text.trim().length > 10;
@@ -154,7 +180,9 @@ export default function Files({ showToast }) {
                                         <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ color: C.tx, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                                            <div style={{ color: hasText ? C.gr : C.re, fontSize: 11 }}>{hasText ? `✅ ${f.text.trim().split(/\s+/).length} words ready` : '⚠️ No text — remove and re-upload'}</div>
+                                            <div style={{ color: hasText ? C.gr : C.re, fontSize: 11 }}>
+                                                {hasText ? `✅ ${f.text.trim().split(/\s+/).length} words ready` : '⚠️ No text — remove and re-upload'}
+                                            </div>
                                         </div>
                                         <button onClick={() => generateCardsFromFile(f)} disabled={loading || !hasText} style={btn('p', { padding: '6px 12px', fontSize: 12, opacity: hasText ? 1 : 0.4 })} title="Generate flashcards">{loading ? '...' : '🃏 Cards'}</button>
                                         <button onClick={() => generatePlanFromFile(f)} disabled={loading || !hasText} style={btn('p', { padding: '6px 12px', fontSize: 12, background: '#6366f1', opacity: hasText ? 1 : 0.4 })} title="Generate study plan">{loading ? '...' : '📅 Plan'}</button>

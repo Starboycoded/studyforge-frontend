@@ -3,11 +3,14 @@ import { C, card, btn } from '../theme';
 import { LS } from '../utils/storage';
 import { apiFetch } from '../utils/ai';
 
+
 export default function Dash({ user, profile, showToast, onTabChange }) {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
 
+
     useEffect(() => { loadStats(); }, []);
+
 
     async function loadStats() {
         setLoading(true);
@@ -35,13 +38,26 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
         } finally { setLoading(false); }
     }
 
+
     const displayName = profile?.name || user?.name || 'Student';
     const displayAvatar = (typeof profile?.avatar === 'string' && profile.avatar) ? profile.avatar : '🧑‍💻';
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-    const velocityHeights = [40, 65, 30, 80, 55, 70, 90];
-    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    const quizHistory = LS.get('sf_quiz_history', []);
+    const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const velocityHeights = (() => {
+        const today = new Date();
+        return Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(today);
+            d.setDate(today.getDate() - (6 - i));
+            const dateStr = d.toISOString().slice(0, 10);
+            const count = quizHistory.filter(q => q.date && q.date.slice(0, 10) === dateStr).length;
+            return Math.min(8 + count * 25, 100);
+        });
+    })();
+
 
     const quickActions = [
         { icon: '📁', label: 'Upload Files', tab: 'files' },
@@ -49,6 +65,7 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
         { icon: '🃏', label: 'Flashcards', tab: 'cards' },
         { icon: '❓', label: 'Take Quiz', tab: 'quiz' },
     ];
+
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -61,6 +78,7 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
                     <p style={{ color: C.mu, fontSize: 13, marginTop: 4 }}>Ready to forge your knowledge today?</p>
                 </div>
             </div>
+
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                 {[
@@ -77,6 +95,7 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
                 ))}
             </div>
 
+
             <div style={card()}>
                 <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Quick Actions</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
@@ -89,17 +108,22 @@ export default function Dash({ user, profile, showToast, onTabChange }) {
                 </div>
             </div>
 
+
             <div style={card()}>
-                <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Study Velocity (Last 7 Days)</h3>
+                <h3 style={{ color: C.tx, fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Quiz Activity (Last 7 Days)</h3>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 100 }}>
                     {velocityHeights.map((h, i) => (
                         <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                            <div style={{ width: '100%', height: h, background: `linear-gradient(to top, ${C.a}, ${C.pu})`, borderRadius: '4px 4px 0 0', opacity: 0.8 }} />
-                            <span style={{ color: C.mu, fontSize: 11 }}>{days[i]}</span>
+                            <div style={{ width: '100%', height: h, background: h > 8 ? `linear-gradient(to top, ${C.a}, ${C.pu})` : C.s2, borderRadius: '4px 4px 0 0', opacity: 0.85, transition: 'height 0.4s ease' }} />
+                            <span style={{ color: C.mu, fontSize: 11 }}>{dayLabels[i]}</span>
                         </div>
                     ))}
                 </div>
+                {quizHistory.length === 0 && (
+                    <p style={{ color: C.mu, fontSize: 12, textAlign: 'center', marginTop: 8 }}>Take a quiz to see your activity here!</p>
+                )}
             </div>
+
 
             <div style={{ ...card({ background: `linear-gradient(135deg, ${C.gr}15, ${C.bl}15)`, border: `1px solid ${C.gr}33` }) }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

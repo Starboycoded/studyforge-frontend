@@ -3,6 +3,7 @@ import { C, card, btn, inp } from '../theme';
 import { LS } from '../utils/storage';
 import { apiFetch } from '../utils/ai';
 
+
 export default function Quiz({ showToast }) {
     const [topic, setTopic] = useState('');
     const [numQ, setNumQ] = useState(5);
@@ -25,7 +26,7 @@ export default function Quiz({ showToast }) {
             const file = uploadedFiles.find(f => f.id === selectedFileId);
             if (!file) { showToast('File not found. Please re-upload it.'); return; }
             if (!file.text || file.text.trim().length < 10) {
-                showToast('Error: Could not read text from this file. Try a PDF or TXT file.');
+                showToast('⚠️ No text extracted from this file. Remove it and re-upload.');
                 return;
             }
             content = file.text;
@@ -100,16 +101,21 @@ export default function Quiz({ showToast }) {
                                     <div style={{ textAlign: 'center', color: C.mu, padding: '16px 0', fontSize: 13 }}>No files uploaded yet. Go to the 📁 Files tab to upload your study material.</div>
                                 ) : (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                        {uploadedFiles.map(f => (
-                                            <div key={f.id} onClick={() => setSelectedFileId(f.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: selectedFileId === f.id ? C.aD : C.s2, border: `1px solid ${selectedFileId === f.id ? C.a : C.b}`, borderRadius: 8, padding: '10px 12px', cursor: 'pointer', transition: 'all 0.15s' }}>
-                                                <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{ color: C.tx, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-                                                    <div style={{ color: C.mu, fontSize: 11 }}>{formatSize(f.size)}</div>
+                                        {uploadedFiles.map(f => {
+                                            const hasText = f.text && f.text.trim().length > 10;
+                                            return (
+                                                <div key={f.id} onClick={() => hasText && setSelectedFileId(f.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: selectedFileId === f.id ? C.aD : C.s2, border: `1px solid ${selectedFileId === f.id ? C.a : C.b}`, borderRadius: 8, padding: '10px 12px', cursor: hasText ? 'pointer' : 'not-allowed', opacity: hasText ? 1 : 0.5, transition: 'all 0.15s' }}>
+                                                    <span style={{ fontSize: 20 }}>{f.name.endsWith('.pdf') ? '📄' : f.name.endsWith('.md') ? '📝' : '📃'}</span>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ color: C.tx, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                                                        <div style={{ color: hasText ? C.mu : C.re, fontSize: 11 }}>
+                                                            {hasText ? formatSize(f.size) : '⚠️ No text — re-upload in Files tab'}
+                                                        </div>
+                                                    </div>
+                                                    {selectedFileId === f.id && <span style={{ color: C.a, fontSize: 16 }}>✓</span>}
                                                 </div>
-                                                {selectedFileId === f.id && <span style={{ color: C.a, fontSize: 16 }}>✓</span>}
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
